@@ -93,6 +93,8 @@ Install [uv](https://docs.astral.sh/uv/), then install the dependencies and down
 uv sync
 ```
 
+`uv sync` creates the virtual environment in `.venv` with the exact versions from `uv.lock`. The commands below use `uv run`, which runs inside that environment; to activate it in your shell instead, run `source .venv/bin/activate`.
+
 Run the notebook:
 
 ```bash
