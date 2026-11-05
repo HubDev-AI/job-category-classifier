@@ -1,0 +1,7 @@
+[project]
+name = "job-category-classifier"
+version = "0.1.0"
+description = "Classifies a job ad into one of six job-board categories (ML Zoomcamp midterm)"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []

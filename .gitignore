@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Data and generated artifacts
+data/raw/
+data/processed/
+models/
+.ipynb_checkpoints/
+.DS_Store
