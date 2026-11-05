@@ -16,6 +16,18 @@ We use 6 biggest technical categories: JavaScript, Java, DevOps, QA Automation, 
 
 Model makes prediction for column `Primary Keyword` which is a category that job board assigned. Only `Position` (ad title) and `Long Description` (text) from the ad are used.
 
+## Getting the data
+
+The data is not stored in this repository. Download the pinned version of the file (about 146 MB) into `data/raw/`:
+
+```bash
+mkdir -p data/raw
+wget -O data/raw/djinni-jobs-en.parquet \
+  https://huggingface.co/datasets/lang-uk/recruitment-dataset-job-descriptions-english/resolve/b56a6054c10f1266a141e37c8df66c79ff2863af/data/train-00000-of-00001.parquet
+```
+
+The link points to revision `b56a6054c10f1266a141e37c8df66c79ff2863af` of the dataset, so everyone gets the same file: 145,859,589 bytes, 141,897 rows and 10 columns. The dataset card lists the MIT license.
+
 ## Model evaluation
 
 We use main metric - macro F1. We calculate F1 for each category and take the mean of 6 values. So the small category Data Science has the same weight as big category JavaScript. We split ads by company so the model is always evaluated on the companies unseen during training.
