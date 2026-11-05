@@ -149,7 +149,9 @@ uv run python test.py
 
 ## Deployment evidence
 
-A screenshot of a real call to the containerized service is in `screenshots/`.
+A real call to the service running in Docker (`docker run -p 9696:9696 job-category-classifier`), sent from its interactive documentation at http://localhost:9696/docs:
+
+![Prediction request to the Docker container](screenshots/predict-docker.png)
 
 ## Limitations
 
