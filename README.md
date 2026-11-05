@@ -30,10 +30,129 @@ The link points to revision `b56a6054c10f1266a141e37c8df66c79ff2863af` of the da
 
 ## Model evaluation
 
-We use main metric - macro F1. We calculate F1 for each category and take the mean of 6 values. So the small category Data Science has the same weight as big category JavaScript. We split ads by company so the model is always evaluated on the companies unseen during training.
+We use main metric - macro F1. We calculate F1 for each category and take the mean of 6 values. So the small category Data Science has the same weight as big category JavaScript. We split ads by company group so the model is always evaluated on the companies unseen during training. A company group joins the spellings of one company name and the companies whose ads start with the same text (e.g. an agency posting for a client). Groups are split 60/20/20 with `random_state=1`, which gives 34 039 training, 8 021 validation and 7 578 test ads.
 
 ## Restrictions
 
 - model knows only about 6 categories. If the ad is in some different field, it is still assigned to one of these 6 categories.
 - job board categories may overlap. E.g. sometimes Data Science ads contain data engineering jobs
 - all ads are from Ukraine 2020-2023. The other markets/years could be different.
+
+## EDA
+
+The exploration in `notebook.ipynb` uses only the training set (34 039 ads).
+
+- JavaScript is 34.5% of the training ads and Data Science 4.5%, so macro F1 is used instead of accuracy.
+- The median length of the text (title plus description) ranges from 1 463 characters for JavaScript to 1 795 for Data Science. The lengths overlap almost completely, so length is not a feature.
+- English level and experience carry little information about the category (mutual information 0.004 and 0.010), so the model uses only the text.
+- Each category has its own characteristic words: `scientist` and `statistical` for Data Science, `django` and `celery` for Python, `selenium` and `webdriver` for QA Automation, `spring` and `hibernate` for Java, `puppet` and `sre` for DevOps.
+- The categories overlap: 22% of the Data Science training ads have "data engineer" in the title.
+
+## Model training
+
+Each ad becomes a dict of the words it contains (lower case, with `+`, `#` and `.` kept, so `c++`, `c#` and `.net` survive). `DictVectorizer` turns it into columns, keeping only the words found in at least 5 ads of the fitting data.
+
+The candidates are compared with 5-fold cross-validation over the company groups of the training set (the same folds for every candidate, words refitted in each fold) and on the validation set. The baseline that always predicts JavaScript has 0.093 validation macro F1.
+
+| Model | CV macro F1 (mean ± std) | Validation macro F1 |
+|---|---|---|
+| Logistic regression, C=0.03, balanced class weights | 0.903 ± 0.006 | **0.914** |
+| XGBoost, eta=0.1, 200 rounds | 0.907 ± 0.007 | 0.910 |
+| Logistic regression, C=0.01 | 0.905 ± 0.005 | 0.905 |
+| Logistic regression, C=1 | 0.882 ± 0.008 | 0.891 |
+| Random forest, 200 trees, no depth limit | 0.882 ± 0.006 | 0.891 |
+| Decision tree, max_depth=20, min_samples_leaf=20 | 0.835 ± 0.013 | 0.842 |
+
+The notebook has all 25 tried configurations. Logistic regression with `C=0.03` and balanced class weights is chosen: it has the best validation macro F1 and it is simpler than XGBoost.
+
+## Final model
+
+The chosen model is trained again on training plus validation and evaluated once on the test set: **macro F1 0.9115, accuracy 0.9347**. The weakest categories are Python (F1 0.854) and Data Science (F1 0.814); on the validation set they are most often confused with each other.
+
+## Project structure
+
+```text
+.
+├── README.md
+├── notebook.ipynb   # data preparation, EDA, model selection
+├── features.py      # tokenizer and word features shared by training and serving
+├── train.py         # trains the final model and saves model.bin
+├── model.bin        # trained DictVectorizer and model
+├── predict.py       # FastAPI prediction service
+├── test.py          # sends one request to the service
+├── Dockerfile
+├── pyproject.toml
+└── uv.lock
+```
+
+## Setup
+
+Install [uv](https://docs.astral.sh/uv/), then install the dependencies and download the data (see [Getting the data](#getting-the-data)):
+
+```bash
+uv sync
+```
+
+Run the notebook:
+
+```bash
+uv run jupyter notebook notebook.ipynb
+```
+
+Train the final model. It prints the test macro F1 and saves `model.bin` (takes about 15 seconds):
+
+```bash
+uv run python train.py
+```
+
+`model.bin` is committed, so the service and Docker image also work without the data.
+
+## Prediction service
+
+Start the service on port 9696:
+
+```bash
+uv run python predict.py
+```
+
+`POST /predict` takes the ad title and text, both non-empty, the title at most 300 characters and the text at most 20 000 characters; other input gets a 422 error. It returns the suggested category and the model's score for each of the six categories. `GET /health` returns `{"status": "ok"}`. The interactive documentation is at http://localhost:9696/docs.
+
+```bash
+curl -X POST http://localhost:9696/predict \
+  -H 'Content-Type: application/json' \
+  -d '{"title": "Senior Data Scientist", "description": "Build machine learning models with Python, pandas and scikit-learn; statistics and A/B testing."}'
+```
+
+```json
+{"category":"Data Science","scores":{"Data Science":0.8937204759526889,"DevOps":0.0018410689183049188,"Java":0.0009733228688896717,"JavaScript":0.0019402196922360007,"Python":0.09322822682951859,"QA Automation":0.00829668573836189}}
+```
+
+`test.py` sends another example:
+
+```bash
+uv run python test.py
+```
+
+## Docker
+
+```bash
+docker build -t job-category-classifier .
+docker run -it --rm -p 9696:9696 job-category-classifier
+```
+
+Then call it from another terminal:
+
+```bash
+curl http://localhost:9696/health
+uv run python test.py
+```
+
+## Deployment evidence
+
+A screenshot of a real call to the containerized service is in `screenshots/`.
+
+## Limitations
+
+- The scores are the model's probabilities, not calibrated confidence. The service always picks one of the six categories, even for an ad from another field.
+- Python and Data Science ads are the hardest to separate, partly because the job board's own labels overlap.
+- The test set has companies unseen in training, but from the same years. Ads from later years are not evaluated.
