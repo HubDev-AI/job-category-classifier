@@ -3,18 +3,20 @@
 import pickle
 
 import pandas as pd
-from sklearn.feature_extraction import DictVectorizer
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline
 
-from features import ad_words
+from features import tokenize
 
 
 DATA_FILE = 'data/raw/djinni-jobs-en.parquet'
 MODEL_FILE = 'model.bin'
 CATEGORIES = ['JavaScript', 'Java', 'DevOps', 'QA Automation', 'Python', 'Data Science']
 MIN_ADS = 5
-C = 0.03
+C = 0.01
 
 
 def load_data():
@@ -50,27 +52,11 @@ def split(df):
 
 
 def train(df):
-    dicts = df.text.apply(ad_words).tolist()
-    counts = pd.Series([w for d in dicts for w in d]).value_counts()
-
-    dv = DictVectorizer()
-    dv.fit([{w: 1 for w in counts[counts >= MIN_ADS].index}])
-
-    model = LogisticRegression(C=C, max_iter=1000, class_weight='balanced')
-    model.fit(dv.transform(dicts), df.primary_keyword.values)
-    return dv, model
-
-
-def macro_f1(y_true, y_pred):
-    f1_values = []
-    for c in CATEGORIES:
-        tp = ((y_pred == c) & (y_true == c)).sum()
-        fp = ((y_pred == c) & (y_true != c)).sum()
-        fn = ((y_pred != c) & (y_true == c)).sum()
-        p = tp / (tp + fp) if tp + fp > 0 else 0.0
-        r = tp / (tp + fn) if tp + fn > 0 else 0.0
-        f1_values.append(2 * p * r / (p + r) if p + r > 0 else 0.0)
-    return sum(f1_values) / len(f1_values)
+    pipeline = make_pipeline(
+        CountVectorizer(tokenizer=tokenize, token_pattern=None, lowercase=False, binary=True, min_df=MIN_ADS),
+        LogisticRegression(C=C, max_iter=1000, class_weight='balanced'),
+    )
+    return pipeline.fit(df.text, df.primary_keyword.values)
 
 
 def main():
@@ -78,16 +64,15 @@ def main():
     print(f'train={len(df_train)} val={len(df_val)} test={len(df_test)}')
 
     df_full_train = pd.concat([df_train, df_val]).reset_index(drop=True)
-    dv, model = train(df_full_train)
+    pipeline = train(df_full_train)
 
-    X_test = dv.transform(df_test.text.apply(ad_words).tolist())
     y_test = df_test.primary_keyword.values
-    y_pred = model.predict(X_test)
-    print(f'test macro F1: {macro_f1(y_test, y_pred):.4f}')
-    print(f'test accuracy: {(y_pred == y_test).mean():.4f}')
+    y_pred = pipeline.predict(df_test.text)
+    print(f'test macro F1: {f1_score(y_test, y_pred, average="macro"):.4f}')
+    print(f'test accuracy: {accuracy_score(y_test, y_pred):.4f}')
 
     with open(MODEL_FILE, 'wb') as f_out:
-        pickle.dump((dv, model), f_out)
+        pickle.dump(pipeline, f_out)
     print(f'model saved to {MODEL_FILE}')
 
 

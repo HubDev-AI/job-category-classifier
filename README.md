@@ -50,24 +50,24 @@ The exploration in `notebook.ipynb` uses only the training set (34 039 ads).
 
 ## Model training
 
-Each ad becomes a dict of the words it contains (lower case, with `+`, `#` and `.` kept, so `c++`, `c#` and `.net` survive). `DictVectorizer` turns it into columns, keeping only the words found in at least 5 ads of the fitting data.
+`CountVectorizer` with our own tokenizer marks which words each ad contains (lower case, with `+`, `#` and `.` kept, so `c++`, `c#` and `.net` survive), keeping only the words found in at least 5 ads of the fitting data. The vectorizer and the model form one scikit-learn pipeline.
 
-The candidates are compared with 5-fold cross-validation over the company groups of the training set (the same folds for every candidate, words refitted in each fold) and on the validation set. The baseline that always predicts JavaScript has 0.093 validation macro F1.
+The candidates are compared with 5-fold cross-validation over the company groups of the training set (`GroupKFold`, the same folds for every candidate, words refitted in each fold) and on the validation set. The baseline that always predicts JavaScript (`DummyClassifier`) has 0.093 validation macro F1.
 
 | Model | CV macro F1 (mean ± std) | Validation macro F1 |
 |---|---|---|
-| Logistic regression, C=0.03, balanced class weights | 0.903 ± 0.006 | **0.914** |
-| XGBoost, eta=0.1, 200 rounds | 0.907 ± 0.007 | 0.910 |
-| Logistic regression, C=0.01 | 0.905 ± 0.005 | 0.905 |
-| Logistic regression, C=1 | 0.882 ± 0.008 | 0.891 |
-| Random forest, 200 trees, no depth limit | 0.882 ± 0.006 | 0.891 |
-| Decision tree, max_depth=20, min_samples_leaf=20 | 0.835 ± 0.013 | 0.842 |
+| Logistic regression, C=0.01, balanced class weights | 0.904 ± 0.007 | **0.914** |
+| XGBoost, eta=0.1, 200 rounds | 0.905 ± 0.006 | 0.910 |
+| Logistic regression, C=0.01 | 0.904 ± 0.007 | 0.905 |
+| Logistic regression, C=1 | 0.881 ± 0.007 | 0.891 |
+| Random forest, 200 trees, no depth limit | 0.879 ± 0.006 | 0.891 |
+| Decision tree, max_depth=20, min_samples_leaf=20 | 0.834 ± 0.008 | 0.842 |
 
-The notebook has all 25 tried configurations. Logistic regression with `C=0.03` and balanced class weights is chosen: it has the best validation macro F1 and it is simpler than XGBoost.
+The notebook has all 25 tried configurations. Logistic regression with `C=0.01` and balanced class weights is chosen: it has the best validation macro F1 and it is simpler than XGBoost.
 
 ## Final model
 
-The chosen model is trained again on training plus validation and evaluated once on the test set: **macro F1 0.9115, accuracy 0.9347**. The weakest categories are Python (F1 0.854) and Data Science (F1 0.814); on the validation set they are most often confused with each other.
+The chosen model is trained again on training plus validation and evaluated once on the test set: **macro F1 0.9110, accuracy 0.9339**. The weakest categories are Python (F1 0.852) and Data Science (F1 0.816); on the validation set they are most often confused with each other.
 
 ## Project structure
 
@@ -75,9 +75,9 @@ The chosen model is trained again on training plus validation and evaluated once
 .
 ├── README.md
 ├── notebook.ipynb   # data preparation, EDA, model selection
-├── features.py      # tokenizer and word features shared by training and serving
+├── features.py      # tokenizer shared by training and serving
 ├── train.py         # trains the final model and saves model.bin
-├── model.bin        # trained DictVectorizer and model
+├── model.bin        # trained pipeline: CountVectorizer and logistic regression
 ├── predict.py       # FastAPI prediction service
 ├── test.py          # sends one request to the service
 ├── Dockerfile
@@ -126,7 +126,7 @@ curl -X POST http://localhost:9696/predict \
 ```
 
 ```json
-{"category":"Data Science","scores":{"Data Science":0.8937204759526889,"DevOps":0.0018410689183049188,"Java":0.0009733228688896717,"JavaScript":0.0019402196922360007,"Python":0.09322822682951859,"QA Automation":0.00829668573836189}}
+{"category":"Data Science","scores":{"Data Science":0.8320050299965877,"DevOps":0.0058805604577163665,"Java":0.003588906765664067,"JavaScript":0.0060361374460448656,"Python":0.13400473198196894,"QA Automation":0.018484633352018123}}
 ```
 
 `test.py` sends another example:

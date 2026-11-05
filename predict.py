@@ -4,8 +4,6 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 
-from features import ad_words
-
 
 MAX_TITLE_LENGTH = 300
 MAX_DESCRIPTION_LENGTH = 20_000
@@ -30,14 +28,13 @@ app = FastAPI(
 )
 
 with open('model.bin', 'rb') as f_in:
-    dv, model = pickle.load(f_in)
+    pipeline = pickle.load(f_in)
 
 
 def predict_single(ad):
-    X = dv.transform([ad_words(ad['title'] + ' ' + ad['description'])])
-    proba = model.predict_proba(X)[0]
-    scores = {c: float(p) for c, p in zip(model.classes_, proba)}
-    return str(model.classes_[proba.argmax()]), scores
+    proba = pipeline.predict_proba([ad['title'] + ' ' + ad['description']])[0]
+    scores = {c: float(p) for c, p in zip(pipeline.classes_, proba)}
+    return str(pipeline.classes_[proba.argmax()]), scores
 
 
 @app.get('/health')
